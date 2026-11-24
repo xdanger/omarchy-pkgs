@@ -1,0 +1,76 @@
+# The aarch64 half of pkgbuilds/chromium: Arch Linux ARM's own chromium
+# build, unchanged, so rc and stable get Chromium's security fixes through the
+# fast ring ahead of their Arch Linux ARM snapshots. It has a folder of its own,
+# as linux-omarchy-aarch64 does, because Arch Linux ARM builds a new Chromium
+# hours to weeks after Arch, and one recipe holds one pkgver.
+#
+# Those snapshots can lag the simdutf soname the build links. Moving the
+# system simdutf ahead would break its other users (sing-box, opendht), so the
+# library the build needs is carried in /usr/lib/chromium/lib and found through
+# RUNPATH. That directory holds nothing else, so the RUNPATH cannot change
+# which copy of any other library (the bundled libvulkan.so.1, say) loads.
+#
+# The private copy comes from the build root, so it always has the soname the
+# build links. simdutf stays in depends only so they match Arch Linux ARM's
+# exactly; any other library rc or stable lack still fails the fast-ring check.
+
+pkgbase=chromium-aarch64
+pkgname=chromium
+pkgver=158.0.8127.36
+pkgrel=1
+_archrel=2
+pkgdesc="A web browser built for speed, simplicity, and security"
+arch=('aarch64')
+url="https://www.chromium.org/Home"
+license=('BSD-3-Clause')
+# Arch Linux ARM's depends, in its order. package() fails when they drift apart.
+depends=('alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'desktop-file-utils' 'expat'
+         'glib2' 'glibc' 'gtk3' 'hicolor-icon-theme' 'libcups' 'libffi' 'libgcc'
+         'libgcrypt' 'libpulse' 'libstdc++' 'libva' 'libx11' 'libxcb'
+         'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon'
+         'libxrandr' 'libxss' 'mesa' 'nspr' 'nss' 'pango' 'pciutils' 'systemd'
+         'systemd-libs' 'ttf-liberation' 'xdg-utils' 'zlib' 'fontconfig' 'brotli'
+         'libjpeg-turbo' 'openh264' 'simdutf' 'highway' 'dav1d' 'flac' 'libdrm'
+         'libxml2' 'zstd' 'libwebp' 'minizip' 'opus' 'double-conversion'
+         'harfbuzz' 'freetype2')
+optdepends=('pipewire: WebRTC desktop sharing under Wayland'
+            'kdialog: support for native dialogs in Plasma'
+            'gtk4: for --gtk-version=4 (GTK4 IME might work better on Wayland)'
+            'qt6-base: Qt support'
+            'org.freedesktop.secrets: password storage backend on GNOME, KDE and Xfce'
+            'upower: Battery Status API support')
+# The simdutf Arch Linux ARM's chromium was built against, taken from the build root.
+makedepends=('patchelf' 'simdutf')
+options=('!strip' '!debug' '!emptydirs')
+# Arch Linux ARM keeps no archive: a file leaves the mirror when the next
+# build lands, and the upstream watch moves this recipe on with it.
+_archpkg=chromium-$pkgver-$_archrel-aarch64.pkg.tar.xz
+source=("https://fl.us.mirror.archlinuxarm.org/aarch64/extra/$_archpkg")
+noextract=("$_archpkg")
+sha256sums=('be2b8d68d164198f1c620b8aaa618865cb9f8b38bdb775f3530721cb9c4a6efc')
+
+package() {
+  local soname lib
+
+  # -p keeps chrome-sandbox setuid, as Arch Linux ARM ships it.
+  bsdtar -xpf "$_archpkg" -C "$pkgdir" --exclude '.*'
+
+  if [[ "$(bsdtar -xOf "$_archpkg" .PKGINFO | sed -n 's/^depend = //p')" != "$(printf '%s\n' "${depends[@]}")" ]]; then
+    echo "Arch Linux ARM's chromium changed its depends; copy them into depends=() from its .PKGINFO" >&2
+    return 1
+  fi
+
+  for soname in $(readelf -d "$pkgdir"/usr/lib/chromium/chromium "$pkgdir"/usr/bin/chromedriver |
+                  sed -n 's/.*(NEEDED).*\[\(libsimdutf\.so\.[0-9]*\)\]/\1/p' | sort -u); do
+    lib=$(realpath -e "/usr/lib/$soname") || {
+      echo "The build root's simdutf does not provide $soname" >&2
+      return 1
+    }
+    install -Dm755 "$lib" "$pkgdir/usr/lib/chromium/lib/$soname"
+  done
+  [[ -n ${soname:-} ]] || { echo "chromium no longer links simdutf; drop the private copy" >&2; return 1; }
+  install -Dm644 /usr/share/licenses/simdutf/LICENSE-MIT "$pkgdir"/usr/share/licenses/chromium/LICENSE.simdutf
+
+  patchelf --set-rpath '$ORIGIN/lib' "$pkgdir"/usr/lib/chromium/chromium
+  patchelf --set-rpath '$ORIGIN/../lib/chromium/lib' "$pkgdir"/usr/bin/chromedriver
+}

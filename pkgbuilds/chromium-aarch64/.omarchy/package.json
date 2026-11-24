@@ -1,0 +1,14 @@
+{
+  "source": "local",
+  "auto_merge": true,
+  "release_ring": "fast",
+  "upstream": {
+    "watch": {
+      "regex": "https://fl.us.mirror.archlinuxarm.org/aarch64/extra/",
+      "pattern": ">chromium-(?P<version>[0-9]+(?:\\.[0-9]+)+)-(?P<archrel>[0-9]+)-aarch64\\.pkg\\.tar\\.xz<",
+      "variables": { "_archrel": "{archrel}" },
+      "revision": "{archrel}",
+      "revision_variable": "_archrel"
+    }
+  }
+}
