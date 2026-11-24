@@ -1,0 +1,19 @@
+{
+  "source": "local",
+  "auto_merge": true,
+  "release_ring": "fast",
+  "upstream": {
+    "watch": {
+      "json": "https://archlinux.org/packages/extra/x86_64/chromium/json/",
+      "path": "pkgver",
+      "fields": {
+        "archrel": "pkgrel"
+      },
+      "variables": {
+        "_archrel": "{archrel}"
+      },
+      "revision": "{archrel}",
+      "revision_variable": "_archrel"
+    }
+  }
+}
